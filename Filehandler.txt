@@ -1,0 +1,163 @@
+using System;
+using System.Data;
+using System.IO;
+using System.Text;
+
+namespace API1
+{
+    public enum EFileType
+    {
+        Excel = 1,
+        Pdf = 2,
+        Csv = 3,
+        Zip = 4
+    }
+
+    public class FileResultModel
+    {
+        public MemoryStream Stream { get; set; }
+        public string FileName { get; set; }
+        public string ContentType { get; set; }
+    }
+
+    public class AppFileHandling
+    {
+        public void GetFileByPath(string filePath)
+        {
+            if (File.Exists(filePath))
+            {
+                Console.WriteLine("File found at: " + filePath);
+            }
+            else
+            {
+                Console.WriteLine("File not found at: " + filePath);
+            }
+        }
+
+        public FileResultModel ConvertToFile(EFileType fileType, DataTable dataTable)
+        {
+            return fileType switch
+            {
+                EFileType.Excel => ConvertToExcel(dataTable),
+                EFileType.Pdf => ConvertToPdf(dataTable),
+                EFileType.Csv => ConvertToCsv(dataTable),
+                EFileType.Zip => ConvertToZip(dataTable),
+                _ => throw new ArgumentOutOfRangeException(nameof(fileType), $"Unsupported file type: {fileType}")
+            };
+        }
+
+        public DataTable CreateDummyDataTable()
+        {
+            DataTable dt = new DataTable("DummyTable");
+            dt.Columns.Add("Id", typeof(int));
+            dt.Columns.Add("Name", typeof(string));
+            dt.Columns.Add("Date", typeof(DateTime));
+
+            for (int i = 1; i <= 5; i++)
+            {
+                dt.Rows.Add(i, "Name " + i, DateTime.Now.AddDays(-i));
+            }
+
+            return dt;
+        }
+
+        private MemoryStream ConvertToStream(DataTable table)
+        {
+            MemoryStream stream = new MemoryStream();
+            StreamWriter writer = new StreamWriter(stream, Encoding.UTF8);
+
+            foreach (DataColumn column in table.Columns)
+            {
+                writer.Write(column.ColumnName + ",");
+            }
+
+            writer.WriteLine();
+
+            foreach (DataRow row in table.Rows)
+            {
+                foreach (var item in row.ItemArray)
+                {
+                    writer.Write(item.ToString() + ",");
+                }
+                writer.WriteLine();
+            }
+
+            writer.Flush();
+            stream.Position = 0;
+            return stream;
+        }
+
+        private FileResultModel ConvertToExcel(DataTable dataTable)
+        {
+            var stream = ConvertToStream(dataTable);
+            return new FileResultModel
+            {
+                Stream = stream,
+                FileName = "data.xlsx",
+                ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            };
+        }
+
+        private FileResultModel ConvertToCsv(DataTable dataTable)
+        {
+            var stream = ConvertToStream(dataTable);
+            return new FileResultModel
+            {
+                Stream = stream,
+                FileName = "data.csv",
+                ContentType = "text/csv"
+            };
+        }
+
+        private FileResultModel ConvertToPdf(DataTable dataTable)
+        {
+            var stream = ConvertToStream(dataTable);
+            return new FileResultModel
+            {
+                Stream = stream,
+                FileName = "data.pdf",
+                ContentType = "application/pdf"
+            };
+        }
+
+        private FileResultModel ConvertToZip(DataTable dataTable)
+        {
+            var stream = ConvertToStream(dataTable);
+            return new FileResultModel
+            {
+                Stream = stream,
+                FileName = "data.zip",
+                ContentType = "application/zip"
+            };
+        }
+    }
+}
+
+
+
+
+using Microsoft.AspNetCore.Mvc;
+using System.Data;
+
+namespace API1.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class FileExportController : ControllerBase
+    {
+        private readonly AppFileHandling _fileHandling;
+
+        public FileExportController()
+        {
+            _fileHandling = new AppFileHandling();
+        }
+
+        [HttpGet("export")]
+        public IActionResult Export([FromQuery] EFileType fileType)
+        {
+            var table = _fileHandling.CreateDummyDataTable();
+            var result = _fileHandling.ConvertToFile(fileType, table);
+            return File(result.Stream, result.ContentType, result.FileName);
+        }
+    }
+}
