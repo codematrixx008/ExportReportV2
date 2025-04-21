@@ -14,8 +14,10 @@
     }
     public class ExportReportsModel
     {
+        public int ReportId { get; set; }
         public string ReportName { get; set; }
         public string SpName { get; set; }
         public string ExportType { get; set; }
     }
+
 }

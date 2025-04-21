@@ -27,7 +27,7 @@ export default function Reports() {
   const [isAnyGenerating, setIsAnyGenerating] = useState(false);
 
   useEffect(() => {
-    // Check if any row has isGenerating = true
+    
     const hasGenerating = reportsData.some((row) => row.isGenerating);
     setIsAnyGenerating(hasGenerating);
   }, [reportsData]);

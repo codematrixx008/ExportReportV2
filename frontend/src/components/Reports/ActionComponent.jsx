@@ -52,15 +52,18 @@ const ActionComponent = ({ cellData }) => {
   const handleRefresh = (cellData, type) => {
     setLoader(true);
     console.log("onHandleRefresh : ", cellData);
-
+  
     axios
       .get(`${apiBaseUrl}/Reports/SaveToServerForStaticReport`, {
-        params: { ReportId: cellData?.reportID, ReportName: cellData?.reportName, SpName: cellData?.spName, ExportType: type },
+        params: {
+          ReportId: cellData?.reportID,
+          ExportType: type,
+        },
       })
       .then((response) => {
         setLoader(false);
         console.log(response.data.message);
-        //alert(response.data.message);
+        alert(response.data.message);
       })
       .catch((error) => {
         setLoader(false);
@@ -68,42 +71,53 @@ const ActionComponent = ({ cellData }) => {
         alert("Error saving file. Check server logs.");
       });
   };
+  
 
   const handleDownload = async (cellData, type) => {
     try {
-      console.log("cellData:", cellData.reportName, type, cellData);
+      console.log("cellData:", cellData.reportID, type);
       if (!cellData?.reportName) {
         console.error("File name is required.");
         return;
       }
 
       const fileName = `${cellData.reportName}.${type}`;
-      const url = `${apiBaseUrl}/Reports/DownloadReportFile?fileName=${encodeURIComponent(fileName)}`;
+      const url = `${apiBaseUrl}/Reports/DownloadReportFile?reportId=${cellData.reportID}&type=${type}`;
 
       const response = await axios.get(url, { responseType: 'blob' });
 
-      const blob = new Blob([response.data]);
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = fileName;
+      // ✅ Extract filename from Content-Disposition header
+      const contentDisposition = response.headers['content-disposition'];  
+      if (contentDisposition && contentDisposition.includes('filename=')) {
+        fileName = contentDisposition
+          .split('filename=')[1]
+          .split(';')[0]
+          .replace(/["']/g, '');
+      }
+  
+      const urldln = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = urldln;
+      link.setAttribute('download', fileName);
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
+      link.remove();
+
+      // const blob = new Blob([response.data]);
+      // const downloadUrl = window.URL.createObjectURL(blob);
+      // const link = document.createElement("a");
+      // link.href = downloadUrl;
+      // link.download = fileName;
+      // document.body.appendChild(link);
+      // link.click();
+      // document.body.removeChild(link);
+      // window.URL.revokeObjectURL(downloadUrl);
     } catch (error) {
       console.error("Error downloading file:", error);
     }
   };
 
-  const handleExportAndDownload = async (cellData, type) => {
-
-    handleDownload(cellData, type);  // TO download file from server if exist  using api .
-    handleExport(cellData, type);    // To Download file based on file type direct from database using api.    
-    handleRefresh(cellData, type);   // To Save Exccel , Csv and Zip format in the server .
-
-  }
-
+  
   return (
     <>
       <div className="export-field">
@@ -116,7 +130,7 @@ const ActionComponent = ({ cellData }) => {
               <FontAwesomeIcon icon={faFileExcel} style={{ color: "darkgreen", fontSize: "1.2rem" }} />
             </Avatar>
           }
-          onClick={() => handleExportAndDownload(cellData, "xlsx")}
+          onClick={() => handleDownload(cellData, "xlsx")}
           disabled={loader || cellData.isGenerating}
         />
         {/* CSV */}
@@ -127,7 +141,7 @@ const ActionComponent = ({ cellData }) => {
               <FontAwesomeIcon icon={faFileCsv} style={{ color: "green", fontSize: "1.2rem" }} />
             </Avatar>
           }
-          onClick={() => handleExportAndDownload(cellData, "csv")}
+          onClick={() => handleDownload(cellData, "csv")}
           disabled={loader || cellData.isGenerating}
         />
         {/* Zip */}
@@ -138,7 +152,7 @@ const ActionComponent = ({ cellData }) => {
               <FontAwesomeIcon icon={faFileArchive} style={{ color: "darkorange", fontSize: "1.2rem" }} />
             </Avatar>
           }
-          onClick={() => handleExportAndDownload(cellData, "zip")}
+          onClick={() => handleDownload(cellData, "zip")}
           disabled={loader || cellData.isGenerating}
         />
         {/* Refresh */}

@@ -8,6 +8,22 @@ using System.Xml.Linq;
 
 namespace Util
 {
+    public class GeneratedFiles
+    {
+        public string ReportName { get; set; }
+        public string ReportType { get; set; }
+
+        public GeneratedFiles()
+        {
+        }
+
+        public GeneratedFiles(string reportName, string reportType)
+        {
+            ReportName = reportName;
+            ReportType = reportType;
+        }
+    }
+
     public static class Util
     {
         public static async Task<List<Dictionary<string, object>>> ReadDataAsync(DbDataReader reader)
@@ -148,13 +164,59 @@ namespace Util
                     await System.IO.File.WriteAllBytesAsync(filePath, allFileByteContents[fileName]);
                 }
 
-                return true;
+                return true;// file list return
             }
             catch (Exception ex)
             {
                 throw ex;
             }
         }
+
+        public static async Task<List<GeneratedFiles>> GenerateSaveAndReturnReportAsync(string fileDirectory, string reportName, List<Dictionary<string, object>> objReaderData)
+        {
+            var lstGeneratedFiles = new List<GeneratedFiles>();
+            var exportTypes = new List<string> { "xlsx", "csv", "zip" };
+            var allFileByteContents = new Dictionary<string, byte[]>();
+            try
+            {
+                if (!Directory.Exists(fileDirectory))
+                {
+                    Directory.CreateDirectory(fileDirectory);
+                }
+
+                foreach (var exportType in exportTypes)
+                {
+                    var fileName = $"{reportName}.{exportType}";
+                    var filePath = Path.Combine(fileDirectory, fileName);
+
+                    byte[] fileContent = [];
+                    if (!exportType.Equals("zip", StringComparison.OrdinalIgnoreCase))
+                    {
+                        fileContent = await GetFileContent(reportName, objReaderData, exportType);
+                    }
+                    else
+                    {
+                        fileContent = await GetZipBytesAsync(allFileByteContents); //take all created data from "allFileByteContents" and crete zip for all combined 
+                    }
+
+                    if (fileContent == null || fileContent.Length == 0)
+                    {
+                        return null;
+                    }
+                    allFileByteContents[fileName] = fileContent; //fileContents["financeReport.csv"] = byte[]
+                    lstGeneratedFiles.Add(new GeneratedFiles(fileName, exportType));
+                    await System.IO.File.WriteAllBytesAsync(filePath, allFileByteContents[fileName]);
+                }
+
+                return lstGeneratedFiles;// file list return
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+        }
+
+
 
         //-------------------------------
 
@@ -348,6 +410,10 @@ namespace Util
                 return memoryStream.ToArray();
             }
         }
+
+        //-----------------------------
+
+    
 
     }
 }

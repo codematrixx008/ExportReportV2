@@ -35,6 +35,23 @@ namespace API1.Repository
             }
         }
 
+        public async Task<ReportsModel> GetReportsByIdAsync(int reportId)
+        {
+            try
+            {
+                using IDbConnection db = _dapperDbConnection.CreateConnection();
+                var retData = await db.QueryFirstOrDefaultAsync<ReportsModel>(
+                    "SELECT * FROM Reports WHERE ReportId = @ReportId",
+                    new { ReportId = reportId }
+                );
+                return retData ?? new ReportsModel();
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
         //public async Task<IEnumerable<ReportsModel>> GetAllReportsAsync()
         //{
         //    return await Task.FromResult(new List<ReportsModel>
@@ -49,7 +66,7 @@ namespace API1.Repository
         //         new ReportsModel { ReportID = 8,  ReportFileName = "Demo", ReportName = "Employee Report", SpName = "sp_GetEmployeeReport", LastGeneratedOn = DateTime.Parse("2025-03-28 16:19:07.733"), LastGeneratedBy = 0, HasStaticFile = false, IsGenerating = false, IsGenerated = false },
         //         new ReportsModel { ReportID = 9,  ReportFileName = "Demo", ReportName = "Expense Report", SpName = "sp_GetExpenseReport", LastGeneratedOn = DateTime.Parse("2025-03-28 16:19:07.733"), LastGeneratedBy = 0, HasStaticFile = false, IsGenerating = false, IsGenerated = false },
         //         new ReportsModel { ReportID = 10, ReportFileName = "Demo",  ReportName = "Revenue Report", SpName = "sp_GetRevenueReport", LastGeneratedOn = DateTime.Parse("2025-03-28 16:19:07.733"), LastGeneratedBy = 0, HasStaticFile = false, IsGenerating = false, IsGenerated = false },
-                 
+
         //     });
         //}
 
@@ -187,5 +204,45 @@ namespace API1.Repository
             }
         }
 
+        public async Task<List<GeneratedFiles>> GenerateSaveAndReturnReports(int ReportId, string ReportName, string SpName)
+        {
+            try
+            {
+                using SqlConnection connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+
+                using SqlCommand command = new SqlCommand($"EXEC {SpName}", connection);
+                using SqlDataReader reader = await command.ExecuteReaderAsync();
+
+                var data = await Util.Util.ReadDataAsync(reader);
+
+                return await Util.Util.GenerateSaveAndReturnReportAsync(_reportPath, ReportName, data);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Error updating report generating status", ex);
+            }
+        }
+
+        public async Task<DataTable> ExecuteQueryAndReturnDataTable(string SpName)
+        {
+            try
+            {
+                using SqlConnection connection = new SqlConnection(_connectionString);
+                await connection.OpenAsync();
+
+                using SqlCommand command = new SqlCommand($"EXEC {SpName}", connection);
+                using SqlDataReader reader = await command.ExecuteReaderAsync();
+
+                DataTable dataTable = new DataTable();
+                dataTable.Load(reader); // This loads all data from the reader into the DataTable
+
+                return dataTable;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Error updating report generating status", ex);
+            }
+        }
     }
 }

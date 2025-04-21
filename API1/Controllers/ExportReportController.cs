@@ -15,6 +15,8 @@ using System.Data.SqlClient;
 using System.Data.Common;
 using Microsoft.Extensions.Configuration;
 using OfficeOpenXml.FormulaParsing.Excel.Functions.Information;
+using API1;
+using System.Xml.Linq;
 
 
 [ApiController]
@@ -28,6 +30,7 @@ public class ReportsController : ControllerBase
     private readonly IDapperDbConnection _dapperDbConnection;
     private readonly string _connectionString;
     private readonly string _reportPath;
+    private readonly AppFileHandling fileHandling;
 
 
     public ReportsController(ILogger<ReportsController> logger, IReports reportsRepository,IDapperDbConnection dapperDbConnection, IConfiguration configuration)
@@ -46,11 +49,93 @@ public class ReportsController : ControllerBase
         return Ok(_reports);
     }
 
-    [HttpGet("ExportToExcelandCsv")]
-    public async Task<IActionResult> ExportToFile([FromQuery] ExportReportsModel model)
+    //[HttpGet]
+    public async Task<ReportsModel> GetReportsByreportIdAsync(int reportId)
     {
-        TraceExecutionTime("ExportToFile", start: true);
+        var _reports = await _reportsRepository.GetReportsByIdAsync(reportId);
+        return _reports;
+    }
 
+
+
+    [HttpGet("DownloadReportFile")]
+    public async Task<IActionResult> DownloadReportFile(int reportId, string type)
+    {
+        // Create a new DataTable
+        DataTable table = new DataTable("SampleTable");
+
+        // Add columns
+        table.Columns.Add("ID", typeof(int));
+        table.Columns.Add("Name", typeof(string));
+        table.Columns.Add("DOB", typeof(DateTime));
+        table.Columns.Add("IsActive", typeof(bool));
+
+        // Add rows
+        table.Rows.Add(1, "John Doe", new DateTime(1990, 5, 15), true);
+        table.Rows.Add(2, "Jane Smith", new DateTime(1985, 12, 22), false);
+        table.Rows.Add(3, "Mike Johnson", new DateTime(2000, 8, 3), true);
+
+
+        var fh = new AppFileHandling();
+        if (!Enum.TryParse(type, true, out EFileType fileType))
+        {
+            return BadRequest("Invalid file type.");
+        }
+
+        FileResultModel result = new FileResultModel();
+        result = fh.ConvertToFile(fileType, table);
+
+        return result.FileContentResult;
+
+    }
+
+    //[HttpGet("DownloadReportFile")]
+    //public async Task<IActionResult> DownloadReportFile(int reportId, string type)
+    //{
+    //    var reports = await _reportsRepository.GetReportsByIdAsync(reportId);
+
+    //    if (reports == null)
+    //    {
+    //        return NotFound("Reports not found.");
+    //    }
+
+    //    FileResultModel result = new FileResultModel();
+    //    string exportType = "stream";
+    //    if (exportType == "stream")
+    //    {
+    //        DataTable dt = await _reportsRepository.ExecuteQueryAndReturnDataTable(reports.SpName);
+    //        if (!Enum.TryParse(type, true, out EFileType fileType))
+    //        {
+    //            return BadRequest("Invalid file type.");
+    //        }
+    //        result = fileHandling.ConvertToFile(fileType, dt);
+    //    }
+    //    else if(exportType == "saveToDisk")
+    //    {
+    //        Boolean blnCreateNewFiles = false;
+    //        string repName = $"{_reportPath}/{reports.ReportFileName}";
+    //        if (!System.IO.File.Exists(repName))
+    //            blnCreateNewFiles = true;
+
+    //        if (blnCreateNewFiles)//First save itno disk folder and return the requested file type
+    //        {
+    //            var generatedFiles = await _reportsRepository.GenerateSaveAndReturnReports(reports.ReportID, reports.ReportName, reports.SpName);
+    //            if (generatedFiles != null)
+    //            {
+    //                repName = generatedFiles.Where(s => s.ReportType == type).Select(t=>t.ReportName).FirstOrDefault() ?? string.Empty;
+    //            }
+    //        }
+
+    //        byte[] fileBytes = System.IO.File.ReadAllBytes(repName);
+    //        return File(fileBytes, result.ContentType, result.FileName);
+    //    }
+
+    //    return File(result.Stream.ToArray(), result.ContentType, result.FileName);
+    //}
+
+
+    private async Task<(MemoryStream stream, string fileName, string contentType)> ExportStreamFileByExportType(ExportReportsModel model)
+    {
         MemoryStream stream;
         string fileName;
         string contentType;
@@ -98,17 +183,17 @@ public class ReportsController : ControllerBase
                 }
             }
 
-            // Reset stream position to the beginning before returning the file
             stream.Seek(0, SeekOrigin.Begin);
         }
         else
         {
-            return BadRequest("Unsupported file type. Please choose either 'xlsx', 'csv', or 'zip'.");
+            // ❌ Can't return BadRequest, so throw an exception instead
+            throw new InvalidOperationException("Unsupported file type. Please choose either 'xlsx', 'csv', or 'zip'.");
         }
 
-        TraceExecutionTime("ExportToFile", stop: true);
-        return File(stream.ToArray(), contentType, fileName);
+        return (stream, fileName, contentType);
     }
+
 
     private void TraceExecutionTime(string traceFunction, bool start = false, bool stop = false, bool restart = false)
     {
@@ -128,25 +213,78 @@ public class ReportsController : ControllerBase
         }
     }
 
+
+    //[HttpGet("SaveToServerForStaticReport")]
+    //public async Task<IActionResult> SaveToServerForStaticReport([FromQuery] int ReportId, [FromQuery] string ReportName, [FromQuery] string SpName, [FromQuery] string ExportType)
+    //{
+    //    try
+    //    {
+    //        var model = new ExportReportsModel{ReportId = ReportId,ReportName = ReportName,SpName = SpName,ExportType = ExportType};
+
+    //        (MemoryStream stream, string fileName, string contentType) = await ExportStreamFileByExportType(model);
+
+    //        var folderPath = "C:\\Test";
+
+    //        if (!Directory.Exists(folderPath))
+    //        {
+    //            Directory.CreateDirectory(folderPath);
+    //        }
+
+    //        var filePath = Path.Combine(folderPath, fileName);
+
+    //        await System.IO.File.WriteAllBytesAsync(filePath, stream.ToArray());
+
+    //        Debug.WriteLine($"Single file saves at :{DateTime.Now.ToString()}");
+
+    //        var generatedFiles = await _reportsRepository.GenerateReports(ReportId, ReportName, SpName);
+
+    //        Debug.WriteLine($"All format saved at :{DateTime.Now.ToString()}");
+    //        //return Ok(new { message = "All Format saved successfully.", path = filePath });
+    //        return Ok();
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        await _reportsRepository.UpdateReportGeneratingStatus(ReportId, false);
+    //        return StatusCode(500, new { message = "Error saving file.", error = ex.Message });
+    //    }
+    //}
+
     [HttpGet("SaveToServerForStaticReport")]
-    public async Task<IActionResult> SaveToServerForStaticReport(int ReportId, string ReportName, string SpName, string ExportType)
+    public async Task<IActionResult> SaveToServerForStaticReport(int ReportId, string ReportName,string SpName,string ExportType)
     {
         try
         {
-            // Mark report as generating
+            var model = new ExportReportsModel { ReportId = ReportId, ReportName = ReportName, SpName = SpName, ExportType = ExportType };
+
+            (MemoryStream stream, string fileName, string contentType) = await ExportStreamFileByExportType(model);
+
+            var folderPath = "C:\\Test";
+
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
+            }
+
+            var filePath = Path.Combine(folderPath, fileName);
+
+            await System.IO.File.WriteAllBytesAsync(filePath, stream.ToArray());
+
+            Debug.WriteLine($"Single file saves at :{DateTime.Now.ToString()}");
+
             var generatedFiles = await _reportsRepository.GenerateReports(ReportId, ReportName, SpName);
 
-            return Ok(new { message = "Files generated successfully.", files = generatedFiles });
+            Debug.WriteLine($"All format saved at :{DateTime.Now.ToString()}");
+            //return Ok(new { message = "All Format saved successfully.", path = filePath });
+            return Ok();
         }
         catch (Exception ex)
         {
             await _reportsRepository.UpdateReportGeneratingStatus(ReportId, false);
-            return StatusCode(500, new { message = "Error saving files.", error = ex.Message });
+            return StatusCode(500, new { message = "Error saving file.", error = ex.Message });
         }
     }
 
-    [HttpGet("DownloadReportFile")]
-    public IActionResult DownloadReportFile(string fileName)
+    private IActionResult downloffile(string fileName)
     {
         try
         {
@@ -155,7 +293,7 @@ public class ReportsController : ControllerBase
                 return BadRequest(new { message = "File name is required." });
             }
 
-            
+
             var filePath = Path.Combine(_reportPath, fileName);
 
             if (!System.IO.File.Exists(filePath))
